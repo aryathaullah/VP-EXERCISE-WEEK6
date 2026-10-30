@@ -1,20 +1,42 @@
 package com.example.practice.campus.navigation
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -23,28 +45,49 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
-import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import androidx.navigation.navArgument
-import com.example.practice.campus.ui.screen.*
-import com.example.practice.campus.ui.theme.*
+import androidx.navigation.toRoute
+import com.example.practice.campus.ui.screen.ClubProjectsScreen
+import com.example.practice.campus.ui.screen.CommunitiesScreen
+import com.example.practice.campus.ui.screen.DashboardScreen
+import com.example.practice.campus.ui.screen.ProjectDetailScreen
+import com.example.practice.campus.ui.theme.CampusBackground
+import com.example.practice.campus.ui.theme.CampusBorder
+import com.example.practice.campus.ui.theme.CampusMuted
+import com.example.practice.campus.ui.theme.CampusNavy
 import com.example.practice.campus.ui.widgets.AddProjectDialog
 import com.example.practice.campus.viewmodel.CampusViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AppNavHost(modifier: Modifier = Modifier,
-               navController: NavHostController = rememberNavController(),
-               campusViewModel: CampusViewModel = viewModel()) {
+fun AppNavHost(
+    modifier: Modifier = Modifier,
+    navController: NavHostController = rememberNavController(),
+    campusViewModel: CampusViewModel = viewModel()
+) {
     val uiState by campusViewModel.uiState.collectAsStateWithLifecycle()
     val entry by navController.currentBackStackEntryAsState()
-    val route = entry?.destination?.route ?: Routes.DASHBOARD
-    val isTopLevel = route == Routes.DASHBOARD || route == Routes.COMMUNITIES
-    val clubId = entry?.arguments?.getString("clubId") ?: ""
+    val destination = entry?.destination
+
+    val isDashboard = destination?.hasRoute<DashboardRoute>() ?: true
+    val isCommunities = destination?.hasRoute<CommunitiesRoute>() == true
+    val isClubProjects = destination?.hasRoute<ClubProjectsRoute>() == true
+    val isProjectDetail = destination?.hasRoute<ProjectDetailRoute>() == true
+
+    val isTopLevel = isDashboard || isCommunities
+
+    val clubId = if (isClubProjects) {
+        try {
+            entry?.toRoute<ClubProjectsRoute>()?.clubId ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+    } else ""
+
     val community = uiState.getClub(clubId)
     val snackbarState = remember { SnackbarHostState() }
 
@@ -65,128 +108,186 @@ fun AppNavHost(modifier: Modifier = Modifier,
 
     val openClub: (String) -> Unit = { id ->
         if (uiState.getClub(id)?.joined == true) {
-            if (route == Routes.DASHBOARD) navigateToTab(navController, Routes.COMMUNITIES)
-            navController.navigate("club_projects/$id") { launchSingleTop = true }
+            if (isDashboard) navigateToTab(navController, CommunitiesRoute)
+            navController.navigate(ClubProjectsRoute(id)) { launchSingleTop = true }
         } else {
             campusViewModel.showAccessMessage()
         }
     }
 
-    Scaffold(modifier = modifier.fillMaxSize(), containerColor = CampusBackground,
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        containerColor = CampusBackground,
         snackbarHost = {
             SnackbarHost(snackbarState) { data ->
-                Snackbar(snackbarData = data, containerColor = CampusNavy,
-                    contentColor = Color.White, actionColor = Color(0xFF93C5FD),
-                    shape = RoundedCornerShape(16.dp))
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = CampusNavy,
+                    contentColor = Color.White,
+                    actionColor = Color(0xFF93C5FD),
+                    shape = RoundedCornerShape(16.dp)
+                )
             }
         },
         topBar = {
-            Column {
-                TopAppBar(title = {
-                    Column {
-                        Text(when (route) {
-                            Routes.DASHBOARD -> "CampusTech Hub"
-                            Routes.COMMUNITIES -> "Communities Directory"
-                            Routes.CLUB_PROJECTS -> "${community?.name ?: "Club"} Projects"
-                            else -> "Project Detail"
-                        }, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                        if (route != Routes.PROJECT_DETAIL) {
-                            Text(when (route) {
-                                Routes.DASHBOARD -> "Student Profile & Portfolio Dashboard"
-                                Routes.COMMUNITIES -> "Pilih komunitas untuk membuka Club Projects"
-                                else -> community?.subtitle ?: ""
-                            }, fontSize = 10.sp, color = CampusMuted)
+            Surface(
+                color = Color.White,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.statusBarsPadding()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp)
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (!isTopLevel) {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
+                            }
+                        } else {
+                            Spacer(modifier = Modifier.width(12.dp))
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = when {
+                                    isDashboard -> "CampusTech Hub"
+                                    isCommunities -> "Communities Directory"
+                                    isClubProjects -> "${community?.name ?: "Club"} Projects"
+                                    else -> "Project Detail"
+                                },
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (!isProjectDetail) {
+                                Text(
+                                    text = when {
+                                        isDashboard -> "Student Profile & Portfolio Dashboard"
+                                        isCommunities -> "Pilih komunitas untuk membuka Club Projects"
+                                        else -> community?.subtitle ?: ""
+                                    },
+                                    fontSize = 10.sp,
+                                    color = CampusMuted
+                                )
+                            }
+                        }
+                        if (isDashboard) {
+                            Box(
+                                modifier = Modifier
+                                    .padding(end = 16.dp)
+                                    .size(28.dp)
+                                    .background(Color(0xFF5031DD), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("AP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        if (isCommunities) {
+                            IconButton(onClick = { campusViewModel.toggleSearch() }) {
+                                Icon(Icons.Default.Search, contentDescription = "Cari komunitas")
+                            }
                         }
                     }
-                }, navigationIcon = {
-                    if (!isTopLevel) {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                        }
-                    }
-                }, actions = {
-                    if (route == Routes.DASHBOARD) {
-                        Box(Modifier.padding(end = 16.dp).size(28.dp)
-                            .background(Color(0xFF5031DD), CircleShape), contentAlignment = Alignment.Center) {
-                            Text("AP", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                    if (route == Routes.COMMUNITIES) {
-                        IconButton(onClick = { campusViewModel.toggleSearch() }) {
-                            Icon(Icons.Default.Search, contentDescription = "Cari komunitas")
-                        }
-                    }
-                }, colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White))
-                HorizontalDivider(color = CampusBorder)
+                    HorizontalDivider(color = CampusBorder)
+                }
             }
         },
         bottomBar = {
             if (isTopLevel) {
                 NavigationBar(containerColor = Color.White) {
-                    NavigationBarItem(selected = route == Routes.DASHBOARD,
-                        onClick = { navigateToTab(navController, Routes.DASHBOARD) },
+                    NavigationBarItem(
+                        selected = isDashboard,
+                        onClick = { navigateToTab(navController, DashboardRoute) },
                         icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                        label = { Text("Dashboard", fontSize = 11.sp) })
-                    NavigationBarItem(selected = route == Routes.COMMUNITIES,
-                        onClick = { navigateToTab(navController, Routes.COMMUNITIES) },
+                        label = { Text("Dashboard", fontSize = 11.sp) }
+                    )
+                    NavigationBarItem(
+                        selected = isCommunities,
+                        onClick = { navigateToTab(navController, CommunitiesRoute) },
                         icon = { Icon(Icons.Default.Groups, contentDescription = null) },
-                        label = { Text("Communities", fontSize = 11.sp) })
+                        label = { Text("Communities", fontSize = 11.sp) }
+                    )
                 }
             }
         }
     ) { innerPadding ->
-        NavHost(navController = navController, startDestination = Routes.DASHBOARD,
-            modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding)) {
-            composable(Routes.DASHBOARD) {
-                DashboardScreen(uiState, dashboardScroll, onClubClick = openClub,
+        NavHost(
+            navController = navController,
+            startDestination = DashboardRoute,
+            modifier = Modifier
+                .padding(innerPadding)
+                .consumeWindowInsets(innerPadding)
+        ) {
+            composable<DashboardRoute> {
+                DashboardScreen(
+                    uiState = uiState,
+                    scrollState = dashboardScroll,
+                    onClubClick = openClub,
                     onProjectClick = { id ->
                         val project = uiState.getProject(id)
                         if (project != null) {
                             openClub(project.clubId)
                             if (uiState.getClub(project.clubId)?.joined == true) {
-                                navController.navigate("project_detail/$id")
+                                navController.navigate(ProjectDetailRoute(id))
                             }
                         }
-                    })
+                    }
+                )
             }
-            composable(Routes.COMMUNITIES) {
-                CommunitiesScreen(uiState, communitiesScroll, onClubClick = openClub,
+            composable<CommunitiesRoute> {
+                CommunitiesScreen(
+                    uiState = uiState,
+                    scrollState = communitiesScroll,
+                    onClubClick = openClub,
                     onJoinClick = { campusViewModel.toggleJoin(it) },
-                    onSearchChange = { campusViewModel.onSearchChange(it) })
+                    onSearchChange = { campusViewModel.onSearchChange(it) }
+                )
             }
-            composable(Routes.CLUB_PROJECTS,
-                arguments = listOf(navArgument("clubId") { type = NavType.StringType })) { backStackEntry ->
-                val selectedId = backStackEntry.arguments?.getString("clubId") ?: ""
+            composable<ClubProjectsRoute> { backStackEntry ->
+                val routeArgs: ClubProjectsRoute = backStackEntry.toRoute()
+                val selectedId = routeArgs.clubId
                 val scrollState = rememberScrollState()
-                ClubProjectsScreen(uiState.getClub(selectedId), uiState.getClubProjects(selectedId), scrollState,
+                ClubProjectsScreen(
+                    community = uiState.getClub(selectedId),
+                    projects = uiState.getClubProjects(selectedId),
+                    scrollState = scrollState,
                     onAddClick = { campusViewModel.openProjectDialog(selectedId) },
-                    onProjectClick = { id -> navController.navigate("project_detail/$id") },
-                    onDelete = { campusViewModel.deleteProject(it) })
+                    onProjectClick = { id -> navController.navigate(ProjectDetailRoute(id)) },
+                    onDelete = { campusViewModel.deleteProject(it) }
+                )
             }
-            composable(Routes.PROJECT_DETAIL,
-                arguments = listOf(navArgument("projectId") { type = NavType.StringType })) { backStackEntry ->
-                val projectId = backStackEntry.arguments?.getString("projectId") ?: ""
+            composable<ProjectDetailRoute> { backStackEntry ->
+                val routeArgs: ProjectDetailRoute = backStackEntry.toRoute()
+                val projectId = routeArgs.projectId
                 val project = uiState.getProject(projectId)
                 val projectClub = uiState.getClub(project?.clubId ?: "")
                 val scrollState = rememberScrollState()
-                ProjectDetailScreen(project, projectClub?.name ?: "", scrollState,
-                    onStatusChange = { campusViewModel.setProjectCompleted(projectId, it) })
+                ProjectDetailScreen(
+                    project = project,
+                    clubName = projectClub?.name ?: "",
+                    scrollState = scrollState,
+                    onStatusChange = { campusViewModel.setProjectCompleted(projectId, it) }
+                )
             }
         }
     }
-    if (uiState.showProjectDialog && route == Routes.CLUB_PROJECTS) {
-        AddProjectDialog(uiState, dialogScroll,
+    if (uiState.showProjectDialog && isClubProjects) {
+        AddProjectDialog(
+            uiState = uiState,
+            scrollState = dialogScroll,
             onTitleChange = { campusViewModel.onTitleChange(it) },
             onDescriptionChange = { campusViewModel.onDescriptionChange(it) },
             onTechClick = { campusViewModel.toggleTech(it) },
             onSave = { campusViewModel.saveProject() },
-            onCancel = { campusViewModel.cancelProjectDialog() })
+            onCancel = { campusViewModel.cancelProjectDialog() }
+        )
     }
 }
 
-fun navigateToTab(navController: NavHostController, route: String) {
+fun navigateToTab(navController: NavHostController, route: Any) {
     navController.navigate(route) {
-        popUpTo(Routes.DASHBOARD) { saveState = true }
+        popUpTo<DashboardRoute> { saveState = true }
         launchSingleTop = true
         restoreState = true
     }
